@@ -30,6 +30,7 @@ struct SARSOPTree
     is_real::BitVector
     cache::TreeCache
     prune_data::PruneData
+    consistency_fix_thresh::Float64
 
     Γ::Vector{AlphaVec{Int}}
 end
@@ -64,6 +65,7 @@ function SARSOPTree(solver, pomdp::POMDP)
         BitVector(),
         cache,
         PruneData(0,0,solver.prunethresh),
+        solver.consistency_fix_thresh,
         AlphaVec{Int}[]
     )
     return insert_root!(solver, tree, _initialize_belief(pomdp, initialstate(pomdp)))
@@ -121,6 +123,11 @@ function update(tree::SARSOPTree, b_idx::Int, a, o)
         0.,0.
     else
         lower_value(tree, tree.b[bp_idx]), upper_value(tree, tree.b[bp_idx])
+    end
+    V̄ < V̲ - tree.consistency_fix_thresh && @warn "Inconsistent Bounds: V̄ < V̲: $V̄ < $V̲"
+    if V̄ < V̲ - tree.consistency_fix_thresh
+        # V̄ = V̲
+        V̲ = V̄
     end
     tree.V_lower[bp_idx] = V̲
     tree.V_upper[bp_idx] = V̄
@@ -190,6 +197,11 @@ function fill_populated!(tree::SARSOPTree, b_idx::Int)
             Q̲ += γ*po*V̲
         end
 
+        Q̄ < Q̲ - tree.consistency_fix_thresh && @warn "Inconsistent Bounds: Q̄ < Q̲: $Q̄ < $Q̲"
+        if Q̄ < Q̲ - tree.consistency_fix_thresh
+            # Q̄ = Q̲
+            Q̲ = Q̄
+        end
         Qa_upper[a] = Q̄
         Qa_lower[a] = Q̲
     end

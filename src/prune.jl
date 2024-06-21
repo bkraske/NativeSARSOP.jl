@@ -3,9 +3,10 @@
     return p > tree.prune_data.prune_threshold
 end
 
-function prune!(solver::SARSOPSolver, tree::SARSOPTree)
-    prune!(tree)
-    if should_prune_alphas(tree)
+function prune!(solver::SARSOPSolver, tree::SARSOPTree, prune_flag, prune_tree_flag, iter)
+    prune_tree_flag && prune!(tree)
+    if should_prune_alphas(tree) && prune_flag
+        # @info "$prune_flag: $iter, Pruning Alphas"
         prune_alpha!(tree, solver.delta)
     end
 end
@@ -33,18 +34,17 @@ function prune!(tree::SARSOPTree)
             Qa_upper = tree.Qa_upper[b_idx]
             Qa_lower = tree.Qa_lower[b_idx]
             b_children = tree.b_children[b_idx]
-            ba = tree.b_children[b_idx]
             max_lower_bound = maximum(Qa_lower)
+            all_ba_pruned = true
             for (idx, Qba) ∈ enumerate(Qa_upper)
                 ba_idx = b_children[idx]
-                all_ba_pruned = true
-                if !tree.ba_pruned[ba_idx] && Qa_upper[idx] < max_lower_bound
+                if !tree.ba_pruned[ba_idx] && (Qba <  max_lower_bound-tree.consistency_fix_thresh)
                     pruneSubTreeBa!(tree, ba_idx)
                 else
                     all_ba_pruned = false
                 end
-                all_ba_pruned && (tree.b_pruned[b_idx] = true)
             end
+            all_ba_pruned && (tree.b_pruned[b_idx] = true)
         end
     end
 end
@@ -85,6 +85,11 @@ function prune_alpha!(tree::SARSOPTree, δ)
         for (j,α_j) ∈ enumerate(Γ)
             (j ≤ i || pruned[j]) && continue
             a1_dominant,a2_dominant = belief_space_domination(α_i, α_j, B_valid, δ)
+            # if a1_dominant
+            #     @info "$j pruned by $i"
+            # elseif a2_dominant
+            #     @info "$i pruned by $j"
+            # end
             #=
             NOTE: α1 and α2 shouldn't technically be able to mutually dominate
             i.e. a1_dominant and a2_dominant should never both be true.
@@ -103,6 +108,7 @@ function prune_alpha!(tree::SARSOPTree, δ)
             end
         end
     end
+    pruned[1:length(actions(tree))] .= false
     deleteat!(Γ, pruned)
     tree.prune_data.last_Γ_size = length(Γ)
 end
